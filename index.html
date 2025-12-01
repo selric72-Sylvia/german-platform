@@ -1,3 +1,11 @@
+<script type="module">
+import { onUserStateChanged } from "./assets/firebase.js";
+
+onUserStateChanged((user) => {
+  if (!user) window.location.href = "login.html";
+});
+</script>
+
 <!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -23,3 +31,4 @@
 
 </body>
 </html>
+
