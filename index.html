@@ -1,34 +1,35 @@
-<script type="module">
-import { onUserStateChanged } from "./assets/firebase.js";
-
-onUserStateChanged((user) => {
-  if (!user) window.location.href = "login.html";
-});
-</script>
-
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-<meta charset="UTF-8" />
-<title>Sylvia 的德语学习平台</title>
-<link rel="stylesheet" href="assets/style.css" />
-<script defer src="assets/main.js"></script>
+<meta charset="UTF-8">
+<title>Sylvia 的德语平台</title>
 </head>
 
 <body>
 
-<h1>Sylvia 的德语学习平台</h1>
+<h1>德语学习平台（自动云同步）</h1>
+<p id="loading">正在加载数据…</p>
 
-<p class="subtitle">一个可持续扩展的德语学习空间</p>
-
-<div class="menu">
-    <a href="modules/plan28.html" class="btn">📅 28 天学习计划</a>
-    <a href="modules/vocab.html" class="btn">📘 词汇学习系统</a>
-    <a href="#" class="btn disabled">📕 语法训练（开发中）</a>
-    <a href="#" class="btn disabled">📒 Dictation（开发中）</a>
-    <a href="#" class="btn disabled">📊 学习数据分析（开发中）</a>
+<div id="menu" style="display:none;">
+  <a href="modules/vocab.html">📘 词汇系统</a><br>
+  <a href="modules/vocab-test.html">📝 词汇测试</a><br>
+  <a href="modules/plan28.html">📅 28 天计划</a>
 </div>
+
+<script type="module">
+import { autoLogin, onUser } from "./assets/firebase.js";
+
+// 1) 自动匿名登录
+autoLogin();
+
+// 2) 登录成功后显示菜单
+onUser((user) => {
+  if (!user) return;
+  document.getElementById("loading").innerText =
+    "你好，用户 " + user.uid.slice(0, 6) + "（你的云同步ID）";
+  document.getElementById("menu").style.display = "block";
+});
+</script>
 
 </body>
 </html>
-
