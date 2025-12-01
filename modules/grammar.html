@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>📕 语法练习（云同步）</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+.container { max-width:900px; margin:auto; padding:16px; }
+.controls { display:flex; gap:12px; align-items:center; margin-bottom:12px; }
+.btn { padding:8px 12px; background:#4f8cff; color:#fff; border-radius:6px; border:none; cursor:pointer; }
+.card { background:#fafafa; border:1px solid #ddd; padding:12px; border-radius:8px; margin-bottom:12px; }
+.qbox { margin:8px 0; }
+.input { width:100%; padding:8px; margin-top:6px; }
+.small { font-size:13px; color:#666; }
+.option { padding:8px; border:1px solid #ddd; border-radius:6px; margin:6px 0; cursor:pointer; background:#f4f7ff; }
+.option.correct { background:#c9f7d6; }
+.option.wrong { background:#ffd4d4; }
+.badge { display:inline-block; padding:4px 8px; background:#eee; border-radius:6px; margin-left:8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <a href="../index.html" class="back">← 返回首页</a>
+  <h2>📕 语法练习（云同步）</h2>
+  <p class="small">题库来源：<code>data/grammar.json</code>（可自行扩充）。做错的题会自动保存到你的云端错题本，支持多设备同步。</p>
+
+  <div class="card">
+    <div class="controls">
+      <label>题数：
+        <select id="numQ">
+          <option>5</option><option>8</option><option>10</option><option>15</option>
+        </select>
+      </label>
+
+      <label>题型：
+        <select id="qtype">
+          <option value="mixed">混合（默认）</option>
+          <option value="trans">翻译（德→中/中→德）</option>
+          <option value="fill">填空</option>
+          <option value="mcq">选择题（多项选择）</option>
+        </select>
+      </label>
+
+      <button class="btn" id="genBtn">生成题目</button>
+      <button class="btn" id="startOver" style="background:#777">重置错题本</button>
+    </div>
+
+    <div id="exerciseArea"></div>
+  </div>
+
+  <div class="card">
+    <h3>📌 错题本（云端） <span class="badge" id="wrongCount">0</span></h3>
+    <div id="wrongList"></div>
+    <p class="small">点击“标记已解决”会从云端删除该条错题。</p>
+  </div>
+
+</div>
+
+<script type="module">
+import { autoLogin, onUser, load, save } from "../assets/firebase.js";
+
+// 全局变量
+let uid = null;
+let baseQuestions = [];   // data/grammar.json
+let cloudWrongs = [];     // 从云端加载的错题（数组）
+let pool = [];            // 当前练习题池（合并 base + cloudWrongs 优先）
+let currentSession = [];  // 本次生成的问题对象：{ id, q, answer, choices? }
+let pointer = 0;
+
+// 载入本地题库
+async function loadBase() {
+  try {
+    const res = await fetch("../data/grammar.json");
+    baseQuestions = await res.json();
+  } catch (e) {
+    baseQuestions = [];
+    console.warn("无法加载 data/grammar.json:", e);
+  }
+}
+
+// 合并错题到练习池（云端错题优先）
+function buildPool(qtype) {
+  const mix = [];
+
+  // 1) 先把云端错题放入（有助复习）
+  for (const w of cloudWrongs) {
+    // ensure structure: {id, prompt, answer, type}
+    mix.push({ id: w.id || ('w-'+Math.random().toString(36).slice(2,8)), prompt: w.prompt, answer: w.answer, type: w.type || 'saved' , source: 'wrong' });
+  }
+
+  // 2) 然把基础题库按类型筛选或随机加入
+  const candidates = baseQuestions.filter(x => {
+    if (!qtype || qtype === 'mixed') return true;
+    return x.type === qtype;
+  });
+
+  // 随机打乱并添加
+  const shuffled = candidates.sort(() => Math.random() - 0.5);
+  shuffled.forEach(s => {
+    mix.push({ id: s.id || ('b-'+Math.random().toString(36).slice(2,8)), prompt: s.prompt, answer: s.answer, type: s.type || 'base', choices: s.choices || null, source: 'base' });
+  });
+
+  pool = mix;
+}
+
+// 生成题目（从 pool 取前 n）
+function generate(n, qtype) {
+  buildPool(qtype);
+  currentSession = pool.slice(0, n).map(item => ({ ...item }));
+  pointer = 0;
+  renderQuestionArea();
+}
+
+// 渲染题目区（逐题显示输入框或选项）
+function renderQuestionArea() {
+  const area = document.getElementById("exerciseArea");
+  area.innerHTML = "";
+
+  if (!currentSession || currentSession.length === 0) {
+    area.innerHTML = "<p class='small'>请先生成题目。</p>";
+    return;
+  }
+
+  const qObj = currentSession[pointer];
+  const idxText = `<div class="small">第 ${pointer+1} / ${currentSession.length} 题（来源：${qObj.source}）</div>`;
+  let html = `<div class="qbox">${idxText}<p><strong>${qObj.prompt}</strong></p>`;
+
+  if (qObj.choices && qObj.choices.length > 0) {
+    // 多选题
+    html += `<div id="choices">`;
+    qObj.choices.forEach((c, i) => {
+      html += `<div class="option" data-opt="${c}">${c}</div>`;
+    });
+    html += `</div>`;
+    html += `<div style="margin-top:8px"><button class="btn" id="skipBtn">跳过 / 下一题</button></div>`;
+  } else {
+    // 填空或翻译（文本输入）
+    html += `<input id="answerInput" class="input" placeholder="在此输入你的答案">`;
+    html += `<div style="margin-top:8px"><button class="btn" id="submitBtn">提交答案</button> <button class="btn" id="skipBtn" style="background:#777">跳过</button></div>`;
+  }
+
+  html += `<div id="feedback" style="margin-top:10px;"></div>`;
+  html += `</div>`;
+
+  area.innerHTML = html;
+
+  // 绑定事件
+  if (qObj.choices && qObj.choices.length > 0) {
+    document.querySelectorAll("#choices .option").forEach(el => {
+      el.onclick = () => handleChoice(el, qObj);
+    });
+    document.getElementById("skipBtn").onclick = nextQuestion;
+  } else {
+    document.getElementById("submitBtn").onclick = () => handleSubmit(qObj);
+    document.getElementById("skipBtn").onclick = nextQuestion;
+  }
+}
+
+// 处理选择题点击
+function handleChoice(el, qObj) {
+  const val = el.dataset.opt;
+  const correct = qObj.answer;
+  if (val === correct) {
+    el.classList.add("correct");
+    showFeedback(true, correct);
+    setTimeout(nextQuestion, 700);
+  } else {
+    el.classList.add("wrong");
+    // 高亮正确
+    document.querySelectorAll("#choices .option").forEach(o => {
+      if (o.dataset.opt === correct) o.classList.add("correct");
+    });
+    showFeedback(false, correct);
+    // 保存错题
+    saveWrong(qObj, val);
+    setTimeout(nextQuestion, 1200);
+  }
+}
+
+// 处理文本提交
+function handleSubmit(qObj) {
+  const user = document.getElementById("answerInput").value.trim();
+  const correct = qObj.answer.trim();
+
+  if (!user) {
+    alert("请先输入答案或点击跳过");
+    return;
+  }
+
+  // 简单比较（大小写不敏感），也可以扩展为近似匹配
+  if (user.toLowerCase() === correct.toLowerCase()) {
+    showFeedback(true, correct);
+    setTimeout(nextQuestion, 700);
+  } else {
+    showFeedback(false, correct);
+    saveWrong(qObj, user);
+    setTimeout(nextQuestion, 1200);
+  }
+}
+
+// 显示反馈
+function showFeedback(isCorrect, correctAns) {
+  const fb = document.getElementById("feedback");
+  if (isCorrect) fb.innerHTML = `<span style="color:green">✔ 正确</span>`;
+  else fb.innerHTML = `<span style="color:red">✘ 错误，正确答案：<strong>${correctAns}</strong></span>`;
+}
+
+// 下一题
+function nextQuestion() {
+  if (pointer < currentSession.length - 1) {
+    pointer++;
+    renderQuestionArea();
+  } else {
+    // 本次练习完成
+    document.getElementById("exerciseArea").innerHTML = `<p class="small">练习完成！你可以生成新一轮题目。</p>`;
+    // 更新错题本计数显示
+    refreshWrongList();
+  }
+}
+
+// 将做错的问题存入云端错题本（collection: grammar; doc: uid）
+async function saveWrong(qObj, userAnswer) {
+  if (!uid) return;
+  const wrongEntry = {
+    id: qObj.id || ('g-'+Math.random().toString(36).slice(2,8)),
+    prompt: qObj.prompt,
+    answer: qObj.answer,
+    type: qObj.type || 'unknown',
+    userAnswer: userAnswer,
+    date: new Date().toLocaleString()
+  };
+
+  // 将此条加入 cloudWrongs（若已有相同 id 则更新）
+  const ex = cloudWrongs.findIndex(x => x.id === wrongEntry.id);
+  if (ex >= 0) {
+    cloudWrongs[ex] = wrongEntry;
+  } else {
+    cloudWrongs.unshift(wrongEntry); // 前置，优先复习
+  }
+
+  // 写回云端
+  await save("grammar", uid, { wrongs: cloudWrongs });
+  refreshWrongList();
+}
+
+// 加载云端错题并渲染列表
+async function refreshWrongList() {
+  const el = document.getElementById("wrongList");
+  el.innerHTML = "";
+  const countBadge = document.getElementById("wrongCount");
+  countBadge.innerText = cloudWrongs.length;
+
+  if (cloudWrongs.length === 0) {
+    el.innerHTML = "<p class='small'>你的错题本为空。</p>";
+    return;
+  }
+
+  cloudWrongs.forEach((w, i) => {
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = `<div><strong>${w.prompt}</strong></div>
+      <div class="small">正确答案：${w.answer} &nbsp; <span style="margin-left:12px">你的答案：${w.userAnswer || '—'}</span></div>
+      <div class="small">记录时间：${w.date}</div>
+      <div style="margin-top:8px">
+        <button class="btn" data-i="${i}" data-id="${w.id}">标记已解决</button>
+      </div>`;
+    el.appendChild(div);
+  });
+
+  // 绑定删除（标记已解决）
+  el.querySelectorAll("button[data-i]").forEach(btn => {
+    btn.onclick = async (e) => {
+      const i = parseInt(btn.getAttribute("data-i"));
+      const id = btn.getAttribute("data-id");
+      // 从 cloudWrongs 删除
+      cloudWrongs = cloudWrongs.filter(x => x.id !== id);
+      await save("grammar", uid, { wrongs: cloudWrongs });
+      refreshWrongList();
+      alert("已标记为已解决并同步云端");
+    };
+  });
+}
+
+// 重置错题本（小心使用）
+document.getElementById("startOver").onclick = async () => {
+  if (!confirm("确认清空云端错题本吗？此操作不可撤销。")) return;
+  cloudWrongs = [];
+  await save("grammar", uid, { wrongs: [] });
+  refreshWrongList();
+  alert("错题本已清空");
+};
+
+// 生成题目按钮
+document.getElementById("genBtn").onclick = () => {
+  const n = parseInt(document.getElementById("numQ").value);
+  const qtype = document.getElementById("qtype").value;
+  generate(n, qtype);
+};
+
+// 匿名自动登录并加载云端数据
+autoLogin();
+onUser(async (user) => {
+  if (!user) return;
+  uid = user.uid;
+
+  // 1) 加载基础题库
+  await loadBase();
+
+  // 2) 加载云端错题
+  const data = await load("grammar", uid);
+  cloudWrongs = data.wrongs || [];
+
+  // 3) 初始显示错题列表
+  refreshWrongList();
+});
+</script>
+</body>
+</html>
