@@ -1,23 +1,19 @@
-// --- Firebase 初始化 ---
+// Firebase 初始模块
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-app.js";
 import {
   getAuth,
-  signInWithEmailAndPassword,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
+  signInAnonymously,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
 
 import {
   getFirestore,
   doc,
-  setDoc,
   getDoc,
-  updateDoc
+  setDoc
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
 
-// ---- 你的配置（已插入） ----
+// 你的配置
 const firebaseConfig = {
   apiKey: "AIzaSyCZNCeZOjk0wfGgm5SFsIM-zuiIkFp-QUA",
   authDomain: "sylvia-deutsch-platform.firebaseapp.com",
@@ -27,40 +23,33 @@ const firebaseConfig = {
   appId: "1:923812260574:web:15c8904b6c7bd3492d704f"
 };
 
-// ---- 初始化 ----
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// ---- 登录（邮箱密码） ----
-export async function emailLogin(email, password) {
-  return await signInWithEmailAndPassword(auth, email, password);
+// 自动匿名登录
+export async function autoLogin() {
+  try {
+    await signInAnonymously(auth);
+  } catch (e) {
+    console.error("匿名登录失败", e);
+  }
 }
 
-// ---- Google 登录 ----
-export async function googleLogin() {
-  const provider = new GoogleAuthProvider();
-  return await signInWithPopup(auth, provider);
-}
-
-// ---- 登出 ----
-export async function logout() {
-  return await signOut(auth);
-}
-
-// ---- 监听用户变化 ----
-export function onUserStateChanged(callback) {
+// 用户状态监听
+export function onUser(callback) {
   onAuthStateChanged(auth, callback);
 }
 
-// ---- 保存用户数据（词汇、计划、进度） ----
-export async function saveUserData(uid, collection, data) {
-  await setDoc(doc(db, collection, uid), data, { merge: true });
+// 云端读取
+export async function load(collection, uid) {
+  const ref = doc(db, collection, uid);
+  const snap = await getDoc(ref);
+  return snap.exists() ? snap.data() : {};
 }
 
-// ---- 读取用户数据 ----
-export async function loadUserData(uid, collection) {
-  const snapshot = await getDoc(doc(db, collection, uid));
-  if (snapshot.exists()) return snapshot.data();
-  return {};
+// 云端保存（合并）
+export async function save(collection, uid, data) {
+  const ref = doc(db, collection, uid);
+  await setDoc(ref, data, { merge: true });
 }
