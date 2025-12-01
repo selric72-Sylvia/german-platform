@@ -2,190 +2,238 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>词汇测试系统</title>
+<title>📝 单词测试（云同步）</title>
 <link rel="stylesheet" href="../assets/style.css">
+
 <style>
 .card {
-    border: 1px solid #ccc;
-    padding: 20px;
-    border-radius: 12px;
-    background: #fafafa;
-    margin-bottom: 20px;
+  border:1px solid #ccc;
+  padding:16px;
+  border-radius:12px;
+  background:#f8f8f8;
+  margin-top:20px;
 }
 .option {
-    padding: 12px;
-    border: 1px solid #ccc;
-    margin: 8px 0;
-    border-radius: 6px;
-    cursor: pointer;
+  padding:8px 12px;
+  background:#e5e5e5;
+  margin:6px 0;
+  border-radius:6px;
+  cursor:pointer;
 }
-.option:hover { background: #e7f1ff; }
-.correct { background: #c0f7c0 !important; }
-.wrong { background: #ffc0c0 !important; }
-.btn-row { display: flex; gap: 10px; margin-top: 15px; }
-.btn-mini {
-    padding: 10px;
-    background: #4f8cff;
-    color: white;
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: center;
-    flex: 1;
-}
-.btn-mini:hover { background: #3d74d8; }
+.option.correct { background:#a0e7a0; }
+.option.wrong { background:#ffb3b3; }
+.btn { padding:8px 14px; background:#4f8cff; color:white; border-radius:6px; cursor:pointer; }
 </style>
 </head>
 
 <body>
 
-<a href="vocab.html" class="back">← 返回词汇学习</a>
-<h2>📝 词汇测试系统</h2>
+<a href="../index.html" class="back">← 返回首页</a>
+<h2>📝 单词测试（云同步）</h2>
+<p>用户ID：<span id="uidShort" style="font-weight:bold"></span></p>
 
 <div>
-    <label>选择测试模式：</label>
-    <select id="testMode">
-        <option value="spell">拼写测试</option>
-        <option value="choice">选择测试</option>
-    </select>
+  <label>测试题数：</label>
+  <select id="countSelect">
+    <option>5</option>
+    <option>10</option>
+    <option>15</option>
+    <option>20</option>
+  </select>
+
+  <label style="margin-left:20px;">测试模式：</label>
+  <select id="modeSelect">
+    <option value="cn">看中文选德语</option>
+    <option value="de">看德语选中文</option>
+  </select>
+
+  <button class="btn" id="startBtn">开始测试</button>
 </div>
 
-<div class="card" id="testArea">
-    <h3 id="question">加载中...</h3>
-
-    <!-- 拼写模式 -->
-    <div id="spellMode">
-        <input id="spellInput" type="text" style="width:100%; padding:10px;">
-        <div class="btn-mini" onclick="checkSpell()">提交答案</div>
-    </div>
-
-    <!-- 选择题模式 -->
-    <div id="choiceMode" style="display:none;">
-        <div id="options"></div>
-    </div>
-
-    <hr>
-    <p><strong>例句：</strong> <span id="ex"></span></p>
-    <p><strong>词组：</strong> <span id="ph"></span></p>
-
-    <div class="btn-row">
-        <div class="btn-mini" onclick="nextQuestion()">下一个</div>
-        <div class="btn-mini" onclick="resetStats()">清空统计</div>
-    </div>
+<div id="testArea" style="display:none;">
+  <div class="card">
+    <h3 id="questionText"></h3>
+    <div id="options"></div>
+  </div>
 </div>
 
-<h3>📊 测试统计</h3>
-<p>总题数：<span id="totalNum">0</span></p>
-<p>答对：<span id="correctNum">0</span></p>
-<p>正确率：<span id="percent">0%</span></p>
+<div id="resultArea" style="display:none; margin-top:20px;">
+  <h3>测试完成！</h3>
+  <p>正确：<span id="correctCount"></span></p>
+  <p>错误：<span id="wrongCount"></span></p>
+  <p>正确率：<span id="accuracy"></span>%</p>
+  <p>错误单词：</p>
+  <ul id="wrongList"></ul>
+</div>
 
-<script>
+<script type="module">
+import { autoLogin, onUser, load, save } from "../assets/firebase.js";
+
+// ---- 全局变量 ----
+let uid = null;
+let base = [];
+let cloud = [];
+let known = [];
 let vocab = [];
-let current;
-let total = Number(localStorage.getItem("test_total") || 0);
-let correct = Number(localStorage.getItem("test_correct") || 0);
+let questions = [];
+let qIndex = 0;
+let correct = 0;
+let wrongWords = [];
 
-document.getElementById("totalNum").innerText = total;
-document.getElementById("correctNum").innerText = correct;
-
-async function loadData() {
-    const res = await fetch("../data/vocab.json");
-    vocab = await res.json();
-    nextQuestion();
+// ---- 加载 base vocab.json ----
+async function loadBase() {
+  try {
+    const resp = await fetch("../data/vocab.json");
+    base = await resp.json();
+  } catch {
+    base = [];
+  }
 }
 
-document.getElementById("testMode").addEventListener("change", () => {
-    const mode = document.getElementById("testMode").value;
-    document.getElementById("spellMode").style.display = (mode === "spell") ? "block" : "none";
-    document.getElementById("choiceMode").style.display = (mode === "choice") ? "block" : "none";
-    nextQuestion();
-});
-
-function nextQuestion() {
-    current = vocab[Math.floor(Math.random() * vocab.length)];
-
-    document.getElementById("question").innerText =
-        `请给出单词：**${current.meaning}**`;
-    
-    document.getElementById("ex").innerText = current.example || "（无例句）";
-    document.getElementById("ph").innerText = current.phrase || "（无词组）";
-
-    // 拼写模式
-    document.getElementById("spellInput").value = "";
-
-    // 选择题模式
-    if (document.getElementById("testMode").value === "choice") {
-        generateChoices();
-    }
+// ---- 合并词库 ----
+function merge() {
+  const map = new Map();
+  base.forEach(w => map.set(w.word, { ...w }));
+  cloud.forEach(w => map.set(w.word, { ...map.get(w.word), ...w }));
+  vocab = Array.from(map.values());
 }
 
-function generateChoices() {
-    let optionsDiv = document.getElementById("options");
-    optionsDiv.innerHTML = "";
+// ---- 随机抽取若干单词生成题目 ----
+function generateQuestions(n, mode) {
+  const arr = [...vocab].sort(() => Math.random() - 0.5).slice(0, n);
+  const qs = [];
 
-    let choices = [current.word];
-    while (choices.length < 4) {
-        let w = vocab[Math.floor(Math.random() * vocab.length)].word;
-        if (!choices.includes(w)) choices.push(w);
+  arr.forEach(item => {
+    let question, answer, options;
+
+    if (mode === "cn") { 
+      question = "选择正确的德语单词： " + item.meaning;
+      answer = item.word;
+      options = arr.slice(0, 4).map(w => w.word);
+    } else { 
+      question = "选择正确的中文释义： " + item.word;
+      answer = item.meaning;
+      options = arr.slice(0, 4).map(w => w.meaning);
     }
 
-    choices.sort(() => Math.random() - 0.5);
+    // 去重并混淆选项
+    options = Array.from(new Set(options));
+    if (!options.includes(answer)) options[0] = answer;
+    options = options.sort(() => Math.random() - 0.5);
 
-    for (let word of choices) {
-        let div = document.createElement("div");
-        div.className = "option";
-        div.innerText = word;
-        div.onclick = () => checkChoice(div, word);
-        optionsDiv.appendChild(div);
-    }
+    qs.push({
+      question,
+      answer,
+      options,
+      source: item
+    });
+  });
+
+  return qs;
 }
 
-function checkSpell() {
-    let ans = document.getElementById("spellInput").value.trim();
-    markResult(ans === current.word);
-}
+// ---- 显示题目 ----
+function showQuestion() {
+  const q = questions[qIndex];
+  questionText.innerText = `(${qIndex+1}/${questions.length}) ` + q.question;
 
-function checkChoice(div, word) {
-    let all = document.querySelectorAll(".option");
-    for (let o of all) o.style.pointerEvents = "none";
+  const box = document.getElementById("options");
+  box.innerHTML = "";
 
-    if (word === current.word) {
+  q.options.forEach(opt => {
+    const div = document.createElement("div");
+    div.className = "option";
+    div.textContent = opt;
+
+    div.onclick = () => {
+      if (opt === q.answer) {
         div.classList.add("correct");
-        markResult(true, false);
-    } else {
+        correct++;
+      } else {
         div.classList.add("wrong");
-        // 显示正确答案
-        for (let o of all) {
-            if (o.innerText === current.word) o.classList.add("correct");
+        wrongWords.push(q.source.word + " — " + q.source.meaning);
+      }
+
+      setTimeout(() => {
+        qIndex++;
+        if (qIndex >= questions.length) {
+          showResult();
+        } else {
+          showQuestion();
         }
-        markResult(false, false);
+      }, 600);
+    };
+
+    box.appendChild(div);
+  });
+}
+
+// ---- 显示结果 ----
+async function showResult() {
+  testArea.style.display = "none";
+  resultArea.style.display = "block";
+
+  correctCount.innerText = correct;
+  wrongCount.innerText = questions.length - correct;
+  accuracy.innerText = Math.round(correct / questions.length * 100);
+
+  wrongList.innerHTML = "";
+  wrongWords.forEach(w => {
+    const li = document.createElement("li");
+    li.textContent = w;
+    wrongList.appendChild(li);
+  });
+
+  // ---- 写入云端 testRecords ----
+  await save("testRecords", uid, {
+    [Date.now()]: {
+      total: questions.length,
+      correct: correct,
+      wrong: wrongWords,
+      accuracy: Math.round(correct / questions.length * 100),
+      date: new Date().toLocaleString()
     }
+  });
+
+  alert("测试记录已同步到云端！");
 }
 
-function markResult(isCorrect, isSpell = true) {
-    total++;
-    if (isCorrect) correct++;
+// ---- 点击开始测试 ----
+startBtn.onclick = () => {
+  const count = parseInt(countSelect.value);
+  const mode = modeSelect.value;
 
-    localStorage.setItem("test_total", total);
-    localStorage.setItem("test_correct", correct);
+  if (vocab.length === 0) return alert("词库为空，无法测试");
 
-    document.getElementById("totalNum").innerText = total;
-    document.getElementById("correctNum").innerText = correct;
-    document.getElementById("percent").innerText =
-        Math.round(correct / total * 100) + "%";
-}
+  questions = generateQuestions(count, mode);
+  qIndex = 0;
+  correct = 0;
+  wrongWords = [];
 
-function resetStats() {
-    total = 0;
-    correct = 0;
-    localStorage.setItem("test_total", 0);
-    localStorage.setItem("test_correct", 0);
+  resultArea.style.display = "none";
+  testArea.style.display = "block";
 
-    document.getElementById("totalNum").innerText = 0;
-    document.getElementById("correctNum").innerText = 0;
-    document.getElementById("percent").innerText = "0%";
-}
+  showQuestion();
+};
 
-loadData();
+// ---- 自动匿名登录 ----
+autoLogin();
+
+// ---- 加载云端词库 ----
+onUser(async (user) => {
+  if (!user) return;
+
+  uid = user.uid;
+  uidShort.innerText = uid.slice(0, 6);
+
+  await loadBase();
+
+  const data = await load("vocab", uid);
+  cloud = data.words || [];
+  known = data.known || [];
+
+  merge();
+});
 </script>
 
 </body>
