@@ -5,5 +5,19 @@
     "meaning": "发生",
     "example": "Was ist passiert?",
     "phrase": "etwas passiert"
+  },
+  {
+    "word": "beschreiben",
+    "pos": "v.",
+    "meaning": "描述",
+    "example": "Kannst du die Situation beschreiben?",
+    "phrase": "etwas genau beschreiben"
+  },
+  {
+    "word": "erinnern",
+    "pos": "v.",
+    "meaning": "记得；提醒",
+    "example": "Ich erinnere mich daran.",
+    "phrase": "sich an etwas erinnern"
   }
 ]
