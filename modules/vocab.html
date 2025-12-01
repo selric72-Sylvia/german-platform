@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>词汇学习（卡片模式）</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+.card {
+    border: 1px solid #ccc;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    background: #fafafa;
+}
+.card h2 { margin-top: 0; }
+.section-title { margin-bottom: 5px; font-weight: bold; }
+
+.btn-row { display: flex; gap: 10px; margin-top: 15px; }
+.btn-mini {
+    padding: 10px;
+    background: #4f8cff;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    flex: 1;
+}
+.btn-mini:hover { background: #3d74d8; }
+
+select, textarea {
+    width: 100%; padding: 8px; margin: 10px 0;
+}
+</style>
+</head>
+
+<body>
+
+<a href="../index.html" class="back">← 返回首页</a>
+<h2>📘 词汇学习系统（卡片模式）</h2>
+
+<div>
+    <label>学习模式：</label>
+    <select id="modeSelect">
+        <option value="new">新学单词</option>
+        <option value="review">复习单词</option>
+        <option value="all">全部单词</option>
+    </select>
+</div>
+
+<div class="card">
+    <h2 id="word">加载中...</h2>
+    <p><strong>词性：</strong> <span id="pos"></span></p>
+    <p><strong>释义：</strong> <span id="meaning"></span></p>
+
+    <p class="section-title">例句：</p>
+    <p id="example" style="color:#444"></p>
+
+    <p class="section-title">词组：</p>
+    <p id="phrase" style="color:#444"></p>
+
+    <div class="btn-row">
+        <div class="btn-mini" onclick="markKnown()">我记住了</div>
+        <div class="btn-mini" onclick="nextWord()">下一个</div>
+        <a class="btn-mini" href="vocab-test.html">进入测试</a>
+    </div>
+</div>
+
+<h3>📥 自动导入单词</h3>
+<textarea id="importBox" rows="6" placeholder="格式：word | pos | meaning | example | phrase"></textarea>
+<div class="btn-mini" onclick="importWords()">导入</div>
+
+<script>
+let vocab = [];
+let currentList = [];
+let index = 0;
+
+async function loadData() {
+    const res = await fetch("../data/vocab.json");
+    vocab = await res.json();
+    refreshList();
+    showWord();
+}
+
+function refreshList() {
+    const mode = document.getElementById("modeSelect").value;
+    let known = JSON.parse(localStorage.getItem("knownWords") || "[]");
+
+    if (mode === "new") {
+        currentList = vocab.filter(w => !known.includes(w.word));
+    } else if (mode === "review") {
+        currentList = vocab.filter(w => known.includes(w.word));
+    } else {
+        currentList = vocab;
+    }
+    index = 0;
+}
+
+function showWord() {
+    if (currentList.length === 0) {
+        document.getElementById("word").innerText = "（该分类无单词）";
+        return;
+    }
+    const w = currentList[index];
+
+    document.getElementById("word").innerText = w.word;
+    document.getElementById("pos").innerText = w.pos;
+    document.getElementById("meaning").innerText = w.meaning;
+    document.getElementById("example").innerText = w.example || "（无例句）";
+    document.getElementById("phrase").innerText = w.phrase || "（无词组）";
+}
+
+function nextWord() {
+    index = (index + 1) % currentList.length;
+    showWord();
+}
+
+function markKnown() {
+    let known = JSON.parse(localStorage.getItem("knownWords") || "[]");
+    const w = currentList[index];
+
+    if (!known.includes(w.word)) known.push(w.word);
+    localStorage.setItem("knownWords", JSON.stringify(known));
+
+    refreshList();
+    showWord();
+}
+
+function importWords() {
+    const text = document.getElementById("importBox").value.trim();
+    if (!text) return;
+
+    const lines = text.split("\n");
+    let newWords = [];
+
+    for (let line of lines) {
+        let p = line.split("|").map(s => s.trim());
+        if (p.length < 5) continue;
+        newWords.push({
+            word: p[0],
+            pos: p[1],
+            meaning: p[2],
+            example: p[3],
+            phrase: p[4]
+        });
+    }
+
+    vocab = vocab.concat(newWords);
+    localStorage.setItem("vocab", JSON.stringify(vocab));
+    alert("导入成功！请刷新页面或切换学习模式。");
+}
+
+document.getElementById("modeSelect").addEventListener("change", () => {
+    refreshList();
+    showWord();
+});
+
+loadData();
+</script>
+
+</body>
+</html>
