@@ -75,8 +75,28 @@ let currentList = [];
 let index = 0;
 
 async function loadData() {
+    // ① 从服务器加载初始词库（vocab.json）
     const res = await fetch("../data/vocab.json");
-    vocab = await res.json();
+    let baseVocab = await res.json();
+
+    // ② 从 localStorage 加载用户导入的词库
+    let stored = JSON.parse(localStorage.getItem("vocab") || "[]");
+
+    // ③ 合并，不重复（按单词名）
+    let combined = [...baseVocab];
+
+    for (let w of stored) {
+        if (!combined.some(x => x.word === w.word)) {
+            combined.push(w);
+        }
+    }
+
+    vocab = combined;
+
+    // ④ 保存合并后的词库到 localStorage（持久化）
+    localStorage.setItem("vocab", JSON.stringify(vocab));
+
+    // ⑤ 重建学习列表
     refreshList();
     showWord();
 }
