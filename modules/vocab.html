@@ -2,179 +2,226 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>词汇学习（卡片模式）</title>
+<title>📘 词汇学习（云同步版）</title>
 <link rel="stylesheet" href="../assets/style.css">
 <style>
 .card {
-    border: 1px solid #ccc;
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 20px;
-    background: #fafafa;
+  border:1px solid #ddd;
+  padding:16px;
+  border-radius:12px;
+  background:#fafafa;
+  margin-top:16px;
 }
-.card h2 { margin-top: 0; }
-.section-title { margin-bottom: 5px; font-weight: bold; }
-
-.btn-row { display: flex; gap: 10px; margin-top: 15px; }
-.btn-mini {
-    padding: 10px;
-    background: #4f8cff;
-    color: white;
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: center;
-    flex: 1;
+.btn {
+  background:#4f8cff;
+  color:white;
+  padding:8px 14px;
+  border-radius:6px;
+  cursor:pointer;
+  border:none;
 }
-.btn-mini:hover { background: #3d74d8; }
-
-select, textarea {
-    width: 100%; padding: 8px; margin: 10px 0;
-}
+.btn:hover { opacity:0.85; }
+.row { display:flex; gap:10px; margin-top:10px; }
+textarea { width:100%; padding:6px; }
 </style>
 </head>
 
 <body>
 
 <a href="../index.html" class="back">← 返回首页</a>
-<h2>📘 词汇学习系统（卡片模式）</h2>
+<h2>📘 词汇学习（云同步）</h2>
+<p>你的云同步 ID：<span id="uidShort" style="font-weight:bold;"></span></p>
+
+<hr>
 
 <div>
-    <label>学习模式：</label>
-    <select id="modeSelect">
-        <option value="new">新学单词</option>
-        <option value="review">复习单词</option>
-        <option value="all">全部单词</option>
-    </select>
+  <label>学习模式：</label>
+  <select id="mode">
+    <option value="new">新学单词</option>
+    <option value="review">复习单词</option>
+    <option value="all">全部单词</option>
+  </select>
 </div>
 
 <div class="card">
-    <h2 id="word">加载中...</h2>
-    <p><strong>词性：</strong> <span id="pos"></span></p>
-    <p><strong>释义：</strong> <span id="meaning"></span></p>
+  <h2 id="word">加载中...</h2>
+  <p><strong>词性：</strong> <span id="pos"></span></p>
+  <p><strong>释义：</strong> <span id="meaning"></span></p>
+  <p><strong>例句：</strong><br><span id="example"></span></p>
+  <p><strong>词组：</strong><br><span id="phrase"></span></p>
 
-    <p class="section-title">例句：</p>
-    <p id="example" style="color:#444"></p>
-
-    <p class="section-title">词组：</p>
-    <p id="phrase" style="color:#444"></p>
-
-    <div class="btn-row">
-        <div class="btn-mini" onclick="markKnown()">我记住了</div>
-        <div class="btn-mini" onclick="nextWord()">下一个</div>
-        <a class="btn-mini" href="vocab-test.html">进入测试</a>
-    </div>
+  <div class="row">
+    <button class="btn" id="known">我记住了</button>
+    <button class="btn" id="next">下一个</button>
+  </div>
 </div>
 
-<h3>📥 自动导入单词</h3>
-<textarea id="importBox" rows="6" placeholder="格式：word | pos | meaning | example | phrase"></textarea>
-<div class="btn-mini" onclick="importWords()">导入</div>
+<h3>📥 导入新单词（自动云同步）</h3>
+<p>格式（每行一条，用竖线分隔）：  
+word | pos | meaning | example | phrase</p>
 
-<script>
-let vocab = [];
-let currentList = [];
-let index = 0;
+<textarea id="input" rows="6"></textarea>
+<button class="btn" id="importBtn">导入</button>
 
-async function loadData() {
-    // ① 从服务器加载初始词库（vocab.json）
-    const res = await fetch("../data/vocab.json");
-    let baseVocab = await res.json();
+<script type="module">
+import { autoLogin, onUser, load, save } from "../assets/firebase.js";
 
-    // ② 从 localStorage 加载用户导入的词库
-    let stored = JSON.parse(localStorage.getItem("vocab") || "[]");
+let uid = null;
 
-    // ③ 合并，不重复（按单词名）
-    let combined = [...baseVocab];
+// 数据区
+let base = [];     // data/vocab.json
+let cloud = [];    // cloud words
+let known = [];    // cloud known words
+let vocab = [];    // merged vocab
+let filtered = []; // current mode list
+let idx = 0;
 
-    for (let w of stored) {
-        if (!combined.some(x => x.word === w.word)) {
-            combined.push(w);
-        }
-    }
-
-    vocab = combined;
-
-    // ④ 保存合并后的词库到 localStorage（持久化）
-    localStorage.setItem("vocab", JSON.stringify(vocab));
-
-    // ⑤ 重建学习列表
-    refreshList();
-    showWord();
+// ---- 载入基础 vocab.json ----
+async function loadBase() {
+  try {
+    const resp = await fetch("../data/vocab.json");
+    base = await resp.json(); // 数组
+  } catch {
+    base = [];
+  }
 }
 
+// ---- 合并基础词库 + 云端自定义 ----
+function merge() {
+  const map = new Map();
+  base.forEach(w => map.set(w.word, { ...w }));
+  cloud.forEach(w => map.set(w.word, { ...map.get(w.word), ...w }));
+  vocab = Array.from(map.values());
+}
+
+// ---- 切换学习模式 ----
 function refreshList() {
-    const mode = document.getElementById("modeSelect").value;
-    let known = JSON.parse(localStorage.getItem("knownWords") || "[]");
-
-    if (mode === "new") {
-        currentList = vocab.filter(w => !known.includes(w.word));
-    } else if (mode === "review") {
-        currentList = vocab.filter(w => known.includes(w.word));
-    } else {
-        currentList = vocab;
-    }
-    index = 0;
+  const mode = document.getElementById("mode").value;
+  if (mode === "new") {
+    filtered = vocab.filter(w => !known.includes(w.word));
+  } else if (mode === "review") {
+    filtered = vocab.filter(w => known.includes(w.word));
+  } else {
+    filtered = [...vocab];
+  }
+  idx = 0;
 }
 
-function showWord() {
-    if (currentList.length === 0) {
-        document.getElementById("word").innerText = "（该分类无单词）";
-        return;
-    }
-    const w = currentList[index];
-
-    document.getElementById("word").innerText = w.word;
-    document.getElementById("pos").innerText = w.pos;
-    document.getElementById("meaning").innerText = w.meaning;
-    document.getElementById("example").innerText = w.example || "（无例句）";
-    document.getElementById("phrase").innerText = w.phrase || "（无词组）";
+// ---- 显示单词卡 ----
+function show() {
+  if (filtered.length === 0) {
+    word.innerText = "（该分类无单词）";
+    pos.innerText = "";
+    meaning.innerText = "";
+    example.innerText = "";
+    phrase.innerText = "";
+    return;
+  }
+  if (idx >= filtered.length) idx = 0;
+  const w = filtered[idx];
+  word.innerText = w.word;
+  pos.innerText = w.pos || "";
+  meaning.innerText = w.meaning || "";
+  example.innerText = w.example || "（无例句）";
+  phrase.innerText = w.phrase || "（无词组）";
 }
 
-function nextWord() {
-    index = (index + 1) % currentList.length;
-    showWord();
+// ---- 下一个 ----
+function next() {
+  idx = (idx + 1) % filtered.length;
+  show();
 }
 
-function markKnown() {
-    let known = JSON.parse(localStorage.getItem("knownWords") || "[]");
-    const w = currentList[index];
+// ---- 标记已掌握（写云端） ----
+async function markKnown() {
+  const w = filtered[idx];
+  if (!w) return;
 
-    if (!known.includes(w.word)) known.push(w.word);
-    localStorage.setItem("knownWords", JSON.stringify(known));
+  if (!known.includes(w.word)) known.push(w.word);
 
-    refreshList();
-    showWord();
+  await save("vocab", uid, {
+    words: cloud,
+    known: known
+  });
+
+  refreshList();
+  show();
+  alert("已同步到云端！");
 }
 
-function importWords() {
-    const text = document.getElementById("importBox").value.trim();
-    if (!text) return;
+// ---- 导入新单词 ----
+async function importWords() {
+  const text = document.getElementById("input").value.trim();
+  if (!text) return alert("请输入内容");
 
-    const lines = text.split("\n");
-    let newWords = [];
+  const lines = text.split("\n").map(s => s.trim()).filter(Boolean);
+  let count = 0;
 
-    for (let line of lines) {
-        let p = line.split("|").map(s => s.trim());
-        if (p.length < 5) continue;
-        newWords.push({
-            word: p[0],
-            pos: p[1],
-            meaning: p[2],
-            example: p[3],
-            phrase: p[4]
-        });
-    }
+  for (const line of lines) {
+    const parts = line.split("|").map(s => s.trim());
+    if (parts.length < 5) continue;
 
-    vocab = vocab.concat(newWords);
-    localStorage.setItem("vocab", JSON.stringify(vocab));
-    alert("导入成功！请刷新页面或切换学习模式。");
+    const obj = {
+      word: parts[0],
+      pos: parts[1],
+      meaning: parts[2],
+      example: parts[3],
+      phrase: parts[4]
+    };
+
+    const idx = cloud.findIndex(x => x.word === obj.word);
+    if (idx >= 0) cloud[idx] = obj;
+    else cloud.push(obj);
+
+    count++;
+  }
+
+  await save("vocab", uid, {
+    words: cloud,
+    known: known
+  });
+
+  merge();
+  refreshList();
+  show();
+
+  alert("已导入并同步：" + count + " 个单词");
 }
 
-document.getElementById("modeSelect").addEventListener("change", () => {
-    refreshList();
-    showWord();
+// ---- 自动匿名登录 ----
+autoLogin();
+
+// ---- 用户进入页面后：加载云数据 ----
+onUser(async (user) => {
+  if (!user) return;
+  uid = user.uid;
+  document.getElementById("uidShort").innerText = uid.slice(0, 6);
+
+  // 1) base
+  await loadBase();
+
+  // 2) cloud data
+  const data = await load("vocab", uid);
+  cloud = data.words || [];
+  known = data.known || [];
+
+  // 3) 合并
+  merge();
+
+  // 4) 根据模式过滤
+  refreshList();
+  show();
 });
 
-loadData();
+// ---- 事件绑定 ----
+document.getElementById("next").onclick = next;
+document.getElementById("known").onclick = markKnown;
+document.getElementById("importBtn").onclick = importWords;
+
+document.getElementById("mode").onchange = () => {
+  refreshList();
+  show();
+};
 </script>
 
 </body>
