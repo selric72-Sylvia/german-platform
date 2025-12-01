@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>词汇测试系统</title>
+<link rel="stylesheet" href="../assets/style.css">
+<style>
+.card {
+    border: 1px solid #ccc;
+    padding: 20px;
+    border-radius: 12px;
+    background: #fafafa;
+    margin-bottom: 20px;
+}
+.option {
+    padding: 12px;
+    border: 1px solid #ccc;
+    margin: 8px 0;
+    border-radius: 6px;
+    cursor: pointer;
+}
+.option:hover { background: #e7f1ff; }
+.correct { background: #c0f7c0 !important; }
+.wrong { background: #ffc0c0 !important; }
+.btn-row { display: flex; gap: 10px; margin-top: 15px; }
+.btn-mini {
+    padding: 10px;
+    background: #4f8cff;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: center;
+    flex: 1;
+}
+.btn-mini:hover { background: #3d74d8; }
+</style>
+</head>
+
+<body>
+
+<a href="vocab.html" class="back">← 返回词汇学习</a>
+<h2>📝 词汇测试系统</h2>
+
+<div>
+    <label>选择测试模式：</label>
+    <select id="testMode">
+        <option value="spell">拼写测试</option>
+        <option value="choice">选择测试</option>
+    </select>
+</div>
+
+<div class="card" id="testArea">
+    <h3 id="question">加载中...</h3>
+
+    <!-- 拼写模式 -->
+    <div id="spellMode">
+        <input id="spellInput" type="text" style="width:100%; padding:10px;">
+        <div class="btn-mini" onclick="checkSpell()">提交答案</div>
+    </div>
+
+    <!-- 选择题模式 -->
+    <div id="choiceMode" style="display:none;">
+        <div id="options"></div>
+    </div>
+
+    <hr>
+    <p><strong>例句：</strong> <span id="ex"></span></p>
+    <p><strong>词组：</strong> <span id="ph"></span></p>
+
+    <div class="btn-row">
+        <div class="btn-mini" onclick="nextQuestion()">下一个</div>
+        <div class="btn-mini" onclick="resetStats()">清空统计</div>
+    </div>
+</div>
+
+<h3>📊 测试统计</h3>
+<p>总题数：<span id="totalNum">0</span></p>
+<p>答对：<span id="correctNum">0</span></p>
+<p>正确率：<span id="percent">0%</span></p>
+
+<script>
+let vocab = [];
+let current;
+let total = Number(localStorage.getItem("test_total") || 0);
+let correct = Number(localStorage.getItem("test_correct") || 0);
+
+document.getElementById("totalNum").innerText = total;
+document.getElementById("correctNum").innerText = correct;
+
+async function loadData() {
+    const res = await fetch("../data/vocab.json");
+    vocab = await res.json();
+    nextQuestion();
+}
+
+document.getElementById("testMode").addEventListener("change", () => {
+    const mode = document.getElementById("testMode").value;
+    document.getElementById("spellMode").style.display = (mode === "spell") ? "block" : "none";
+    document.getElementById("choiceMode").style.display = (mode === "choice") ? "block" : "none";
+    nextQuestion();
+});
+
+function nextQuestion() {
+    current = vocab[Math.floor(Math.random() * vocab.length)];
+
+    document.getElementById("question").innerText =
+        `请给出单词：**${current.meaning}**`;
+    
+    document.getElementById("ex").innerText = current.example || "（无例句）";
+    document.getElementById("ph").innerText = current.phrase || "（无词组）";
+
+    // 拼写模式
+    document.getElementById("spellInput").value = "";
+
+    // 选择题模式
+    if (document.getElementById("testMode").value === "choice") {
+        generateChoices();
+    }
+}
+
+function generateChoices() {
+    let optionsDiv = document.getElementById("options");
+    optionsDiv.innerHTML = "";
+
+    let choices = [current.word];
+    while (choices.length < 4) {
+        let w = vocab[Math.floor(Math.random() * vocab.length)].word;
+        if (!choices.includes(w)) choices.push(w);
+    }
+
+    choices.sort(() => Math.random() - 0.5);
+
+    for (let word of choices) {
+        let div = document.createElement("div");
+        div.className = "option";
+        div.innerText = word;
+        div.onclick = () => checkChoice(div, word);
+        optionsDiv.appendChild(div);
+    }
+}
+
+function checkSpell() {
+    let ans = document.getElementById("spellInput").value.trim();
+    markResult(ans === current.word);
+}
+
+function checkChoice(div, word) {
+    let all = document.querySelectorAll(".option");
+    for (let o of all) o.style.pointerEvents = "none";
+
+    if (word === current.word) {
+        div.classList.add("correct");
+        markResult(true, false);
+    } else {
+        div.classList.add("wrong");
+        // 显示正确答案
+        for (let o of all) {
+            if (o.innerText === current.word) o.classList.add("correct");
+        }
+        markResult(false, false);
+    }
+}
+
+function markResult(isCorrect, isSpell = true) {
+    total++;
+    if (isCorrect) correct++;
+
+    localStorage.setItem("test_total", total);
+    localStorage.setItem("test_correct", correct);
+
+    document.getElementById("totalNum").innerText = total;
+    document.getElementById("correctNum").innerText = correct;
+    document.getElementById("percent").innerText =
+        Math.round(correct / total * 100) + "%";
+}
+
+function resetStats() {
+    total = 0;
+    correct = 0;
+    localStorage.setItem("test_total", 0);
+    localStorage.setItem("test_correct", 0);
+
+    document.getElementById("totalNum").innerText = 0;
+    document.getElementById("correctNum").innerText = 0;
+    document.getElementById("percent").innerText = "0%";
+}
+
+loadData();
+</script>
+
+</body>
+</html>
