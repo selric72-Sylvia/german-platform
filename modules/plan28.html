@@ -2,76 +2,157 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>28天学习计划</title>
+<title>📅 28 天学习计划（云同步）</title>
 <link rel="stylesheet" href="../assets/style.css">
+
+<style>
+.dayBox {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:10px;
+  margin:8px 0;
+  border:1px solid #ccc;
+  border-radius:8px;
+  background:#fafafa;
+}
+.done {
+  background:#d4f3d4 !important;
+}
+.btn {
+  padding:8px 12px;
+  background:#4f8cff;
+  color:white;
+  border-radius:6px;
+  cursor:pointer;
+}
+.stats {
+  background:#f0f0f0;
+  padding:10px 12px;
+  border-radius:8px;
+  margin-bottom:16px;
+}
+</style>
 </head>
 
 <body>
 
 <a href="../index.html" class="back">← 返回首页</a>
-<h2>📅 Sylvia 的 28 天学习计划</h2>
+<h2>📅 28 天学习计划</h2>
+<p>用户ID：<span id="uidShort" style="font-weight:bold;"></span></p>
 
-<div class="progressBar">
-    <div id="overallProgress" class="progressFill"></div>
+<div class="stats">
+  <p>已完成天数：<span id="doneCount">0</span> 天</p>
+  <p>剩余天数：<span id="leftCount">28</span> 天</p>
+  <p>完成率：<span id="percent">0</span>%</p>
 </div>
-<p id="overallText" class="center"></p>
 
-<table>
-    <tr>
-        <th>天数</th>
-        <th>语法任务</th>
-        <th>词汇任务</th>
-        <th>课本复习</th>
-        <th>完成率</th>
-    </tr>
-    <tbody id="planTable"></tbody>
-</table>
+<div id="planArea"></div>
 
-<script>
-let plan = JSON.parse(localStorage.getItem("sylvia_28day") || "[]");
+<script type="module">
+import { autoLogin, onUser, load, save } from "../assets/firebase.js";
 
-if (plan.length === 0) {
-    for (let i = 1; i <= 28; i++) {
-        plan.push({ day: i, grammar: false, vocab: false, book: false });
-    }
-    localStorage.setItem("sylvia_28day", JSON.stringify(plan));
-}
+let uid = null;
+let plan = []; // 结构：[{day:1, done:false, time:""}, ...]
 
-function renderPlan() {
-    const tb = document.getElementById("planTable");
-    tb.innerHTML = "";
+const TOTAL = 28;
 
-    let total = 0, done = 0;
-
-    plan.forEach((d, idx) => {
-        let finished = [d.grammar, d.vocab, d.book].filter(Boolean).length;
-        let rate = Math.round(finished / 3 * 100);
-
-        total += 3;
-        done += finished;
-
-        tb.innerHTML += `
-        <tr>
-            <td>第 ${d.day} 天</td>
-            <td class="${d.grammar?'done':''}" onclick="toggle(${idx}, 'grammar')">语法</td>
-            <td class="${d.vocab?'done':''}" onclick="toggle(${idx}, 'vocab')">词汇</td>
-            <td class="${d.book?'done':''}" onclick="toggle(${idx}, 'book')">课本</td>
-            <td>${rate}%</td>
-        </tr>`;
+// ---- 创建一个全新的 28 天计划 ----
+function createNewPlan() {
+  const arr = [];
+  for (let i = 1; i <= TOTAL; i++) {
+    arr.push({
+      day: i,
+      done: false,
+      time: ""
     });
-
-    let overall = Math.round(done / total * 100);
-    document.getElementById("overallProgress").style.width = overall + "%";
-    document.getElementById("overallText").innerText = `整体进度：${overall}%`;
+  }
+  return arr;
 }
 
-function toggle(i, key) {
-    plan[i][key] = !plan[i][key];
-    localStorage.setItem("sylvia_28day", JSON.stringify(plan));
-    renderPlan();
+// ---- 渲染计划 ----
+function renderPlan() {
+  const area = document.getElementById("planArea");
+  area.innerHTML = "";
+
+  plan.forEach((item, index) => {
+    const div = document.createElement("div");
+    div.className = "dayBox";
+    if (item.done) div.classList.add("done");
+
+    div.innerHTML = `
+      <div>
+        <strong>第 ${item.day} 天</strong><br>
+        <small>${item.time ? "完成时间：" + item.time : "未完成"}</small>
+      </div>
+      <div>
+        <input type="checkbox" ${item.done ? "checked" : ""} data-index="${index}">
+      </div>
+    `;
+
+    area.appendChild(div);
+  });
+
+  updateStats();
 }
 
-renderPlan();
+// ---- 更新统计信息 ----
+function updateStats() {
+  const done = plan.filter(p => p.done).length;
+  const left = TOTAL - done;
+  const percent = Math.round(done / TOTAL * 100);
+
+  doneCount.innerText = done;
+  leftCount.innerText = left;
+  percent.innerText = percent;
+}
+
+// ---- 点击复选框：保存云端 ----
+async function toggleDay(index) {
+  const item = plan[index];
+  item.done = !item.done;
+
+  if (item.done) {
+    item.time = new Date().toLocaleString();
+  } else {
+    item.time = "";
+  }
+
+  // 云同步
+  await save("plan28", uid, { days: plan });
+
+  renderPlan();
+}
+
+// ---- 自动匿名登录 ----
+autoLogin();
+
+// ---- 加载云端数据 ----
+onUser(async (user) => {
+  if (!user) return;
+  uid = user.uid;
+  uidShort.innerText = uid.slice(0, 6);
+
+  // 读取云端 plan28
+  const data = await load("plan28", uid);
+  if (data.days) {
+    plan = data.days;
+  } else {
+    plan = createNewPlan();
+    // 写入云端初始化
+    await save("plan28", uid, { days: plan });
+  }
+
+  renderPlan();
+});
+
+// ---- 监听复选框点击 ----
+document.addEventListener("change", (e) => {
+  if (e.target.type === "checkbox") {
+    const index = parseInt(e.target.dataset.index);
+    toggleDay(index);
+  }
+});
 </script>
 
 </body>
