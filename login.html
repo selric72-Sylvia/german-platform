@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>登录 - 德语学习平台</title>
+<script type="module" src="./assets/firebase.js"></script>
+</head>
+<body>
+
+<h2>登录德语学习平台</h2>
+
+<input id="email" placeholder="Email">
+<input id="password" placeholder="密码" type="password">
+<button id="emailLoginBtn">邮箱登录</button>
+
+<br><br>
+<button id="googleLoginBtn">使用 Google 登录</button>
+
+<p id="msg"></p>
+
+<script type="module">
+import { emailLogin, googleLogin, onUserStateChanged } from "./assets/firebase.js";
+
+document.getElementById("emailLoginBtn").onclick = async () => {
+  const email = email.value;
+  const password = password.value;
+
+  try {
+    await emailLogin(email, password);
+    msg.textContent = "登录成功！正在跳转…";
+    setTimeout(() => location.href = "index.html", 1000);
+  } catch (e) {
+    msg.textContent = "登录失败：" + e.message;
+  }
+};
+
+document.getElementById("googleLoginBtn").onclick = async () => {
+  try {
+    await googleLogin();
+    msg.textContent = "登录成功！正在跳转…";
+    setTimeout(() => location.href = "index.html", 1000);
+  } catch (e) {
+    msg.textContent = "Google 登录失败：" + e.message;
+  }
+};
+
+// 已登录自动跳转
+onUserStateChanged((user) => {
+  if (user) location.href = "index.html";
+});
+</script>
+
+</body>
+</html>
