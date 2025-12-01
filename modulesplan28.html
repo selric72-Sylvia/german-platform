@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>28天学习计划</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+
+<body>
+
+<a href="../index.html" class="back">← 返回首页</a>
+<h2>📅 Sylvia 的 28 天学习计划</h2>
+
+<div class="progressBar">
+    <div id="overallProgress" class="progressFill"></div>
+</div>
+<p id="overallText" class="center"></p>
+
+<table>
+    <tr>
+        <th>天数</th>
+        <th>语法任务</th>
+        <th>词汇任务</th>
+        <th>课本复习</th>
+        <th>完成率</th>
+    </tr>
+    <tbody id="planTable"></tbody>
+</table>
+
+<script>
+let plan = JSON.parse(localStorage.getItem("sylvia_28day") || "[]");
+
+if (plan.length === 0) {
+    for (let i = 1; i <= 28; i++) {
+        plan.push({ day: i, grammar: false, vocab: false, book: false });
+    }
+    localStorage.setItem("sylvia_28day", JSON.stringify(plan));
+}
+
+function renderPlan() {
+    const tb = document.getElementById("planTable");
+    tb.innerHTML = "";
+
+    let total = 0, done = 0;
+
+    plan.forEach((d, idx) => {
+        let finished = [d.grammar, d.vocab, d.book].filter(Boolean).length;
+        let rate = Math.round(finished / 3 * 100);
+
+        total += 3;
+        done += finished;
+
+        tb.innerHTML += `
+        <tr>
+            <td>第 ${d.day} 天</td>
+            <td class="${d.grammar?'done':''}" onclick="toggle(${idx}, 'grammar')">语法</td>
+            <td class="${d.vocab?'done':''}" onclick="toggle(${idx}, 'vocab')">词汇</td>
+            <td class="${d.book?'done':''}" onclick="toggle(${idx}, 'book')">课本</td>
+            <td>${rate}%</td>
+        </tr>`;
+    });
+
+    let overall = Math.round(done / total * 100);
+    document.getElementById("overallProgress").style.width = overall + "%";
+    document.getElementById("overallText").innerText = `整体进度：${overall}%`;
+}
+
+function toggle(i, key) {
+    plan[i][key] = !plan[i][key];
+    localStorage.setItem("sylvia_28day", JSON.stringify(plan));
+    renderPlan();
+}
+
+renderPlan();
+</script>
+
+</body>
+</html>

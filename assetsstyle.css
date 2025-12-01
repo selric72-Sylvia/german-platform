@@ -1,0 +1,64 @@
+body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    max-width: 900px;
+    margin: auto;
+    padding: 20px;
+}
+
+h1, h2 { text-align: center; }
+
+.subtitle {
+    text-align: center;
+    margin-top: -10px;
+    color: #666;
+}
+
+.menu {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 40px;
+}
+
+.btn {
+    display: block;
+    padding: 15px;
+    background: #4f8cff;
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 18px;
+}
+
+.btn:hover { background: #3d74d8; }
+.btn.disabled { opacity: 0.5; pointer-events: none; }
+
+.back {
+    display: inline-block;
+    margin-bottom: 10px;
+    text-decoration: none;
+}
+
+table { width: 100%; border-collapse: collapse; }
+td, th {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: center;
+}
+
+.done { background: #bdf3bd; }
+.center { text-align: center; }
+
+.progressBar {
+    height: 22px;
+    background: #eee;
+    border-radius: 12px;
+    margin: 20px 0;
+}
+.progressFill {
+    height: 22px;
+    background: #6ec46e;
+    width: 0%;
+    border-radius: 12px;
+}
