@@ -1,38 +1,45 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-<meta charset="UTF-8">
-<title>Sylvia 的德语平台</title>
-  <link rel="stylesheet" href="assets/style.css">
-
+<meta charset="utf-8">
+<title>Sylvia Deutsch Platform</title>
+<link rel="stylesheet" href="assets/style.css">
+<script type="module" src="assets/firebase.js"></script>
 </head>
 
 <body>
+<div class="container">
+  <h2>🇩🇪 Sylvia 德语学习平台</h2>
+  <p class="small">所有进度自动云同步 · 多设备无缝使用</p>
 
-<h1>德语学习平台（自动云同步）</h1>
-<p id="loading">正在加载数据…</p>
+  <div class="row">
 
-<div id="menu" style="display:none;">
-  <a href="modules/vocab.html">📘 词汇系统</a><br>
-  <a href="modules/vocab-test.html">📝 词汇测试</a><br>
-  <a href="modules/plan28.html">📅 28 天计划</a>
+    <a class="card box50" href="modules/vocab.html">
+      <h3>📚 词汇系统</h3>
+      <p>新词 / 复习 / 例句 / 测试模式</p>
+    </a>
+
+    <a class="card box50" href="modules/vocab-test.html">
+      <h3>📝 单词测试</h3>
+      <p>随机抽取 · 测试结果云同步</p>
+    </a>
+
+    <a class="card box50" href="modules/plan28.html">
+      <h3>📅 学习计划 · 28天</h3>
+      <p>每天打卡 · 自动记录学习数据</p>
+    </a>
+
+    <a class="card box50" href="modules/grammar.html">
+      <h3>📕 语法练习</h3>
+      <p>选择题 / 填空 / 错题本 · 云同步</p>
+    </a>
+
+    <a class="card box50" href="modules/dashboard.html">
+      <h3>📊 学习仪表板</h3>
+      <p>词汇 · 语法 · 计划 · 数据可视化</p>
+    </a>
+
+  </div>
 </div>
-
-<script type="module">
-import { autoLogin, onUser } from "./assets/firebase.js";
-
-// 1) 自动匿名登录
-autoLogin();
-
-// 2) 登录成功后显示菜单
-onUser((user) => {
-  if (!user) return;
-  document.getElementById("loading").innerText =
-    "你好，用户 " + user.uid.slice(0, 6) + "（你的云同步ID）";
-  document.getElementById("menu").style.display = "block";
-});
-</script>
-
 </body>
 </html>
-
