@@ -6,12 +6,15 @@ import {
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-auth.js";
 
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc
-} from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } 
+from "https://www.gstatic.com/firebasejs/12.6.0/firebase-firestore.js";
+
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
+
 
 // 你的配置
 const firebaseConfig = {
@@ -53,3 +56,4 @@ export async function save(collection, uid, data) {
   const ref = doc(db, collection, uid);
   await setDoc(ref, data, { merge: true });
 }
+
