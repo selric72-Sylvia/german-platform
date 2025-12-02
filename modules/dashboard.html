@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>📊 学习数据仪表板 | Sylvia Deutsch Platform</title>
+<link rel="stylesheet" href="../assets/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.container { max-width: 1000px; margin:auto; padding:16px; }
+.card { background:#fafafa; border:1px solid #ddd; padding:16px; border-radius:12px; margin-bottom:20px; }
+h2, h3 { margin-bottom:10px; }
+.chartBox { width:100%; height:320px; }
+.small { font-size:13px; color:#666; }
+.row { display:flex; gap:20px; flex-wrap:wrap; }
+.box50 { flex:1 1 calc(50% - 20px); }
+@media(max-width:700px){ .box50 { flex:1 1 100%; } }
+</style>
+</head>
+
+<body>
+<div class="container">
+  <a href="../index.html" class="back">← 返回首页</a>
+  <h2>📊 Sylvia 的学习数据仪表板</h2>
+  <p class="small">所有图表都来自你的 Firestore 云端数据（自动同步）。</p>
+
+  <!-- 1. 学习计划完成情况 -->
+  <div class="card">
+    <h3>📅 28天学习进度（完成 vs 未完成）</h3>
+    <div class="chartBox">
+      <canvas id="planChart"></canvas>
+    </div>
+  </div>
+
+  <div class="row">
+    <!-- 2. 词汇统计 -->
+    <div class="card box50">
+      <h3>📚 词汇系统统计</h3>
+      <div class="chartBox">
+        <canvas id="vocabChart"></canvas>
+      </div>
+    </div>
+
+    <!-- 3. 语法统计 -->
+    <div class="card box50">
+      <h3>📕 语法练习正确率</h3>
+      <div class="chartBox">
+        <canvas id="grammarChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. 每日学习活动柱状图（从 stats/uid 加载） -->
+  <div class="card">
+    <h3>⏱ 每日学习活动（任务完成数）</h3>
+    <div class="chartBox">
+      <canvas id="dailyChart"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script type="module">
+import { autoLogin, onUser, load } from "../assets/firebase.js";
+
+// 图表变量
+let planChart, vocabChart, grammarChart, dailyChart;
+
+// 自动匿名登录
+autoLogin();
+
+onUser(async (user) => {
+  if (!user) return;
+  const uid = user.uid;
+
+  // 从云端加载各模块数据
+  const plan = await load("plan28", uid) || {};
+  const vocab = await load("vocab", uid) || {};
+  const grammar = await load("grammar", uid) || {};
+  const stats = await load("stats", uid) || {}; // future daily record
+
+  // 渲染所有图表
+  renderPlanChart(plan);
+  renderVocabChart(vocab);
+  renderGrammarChart(grammar);
+  renderDailyChart(stats);
+});
+
+
+// ---------------------------
+// 1）28 天学习计划图表
+// ---------------------------
+function renderPlanChart(plan) {
+  const labels = [];
+  const data = [];
+
+  for (let i = 1; i <= 28; i++) {
+    labels.push("Day " + i);
+    data.push(plan["day" + i] ? 1 : 0);
+  }
+
+  planChart = new Chart(document.getElementById("planChart"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [{
+        label: "完成情况（1=完成，0=未完成）",
+        data,
+        backgroundColor: data.map(v => v === 1 ? "rgba(75,192,192,0.6)" : "rgba(200,200,200,0.6)"),
+      }]
+    },
+    options: { responsive: true }
+  });
+}
+
+
+// ---------------------------
+// 2）词汇系统统计图：新词/复习/已掌握
+// ---------------------------
+function renderVocabChart(vocab) {
+  const countNew = vocab.newWords ? vocab.newWords.length : 0;
+  const countReview = vocab.reviewWords ? vocab.reviewWords.length : 0;
+  const countMastered = vocab.mastered ? vocab.mastered.length : 0;
+
+  vocabChart = new Chart(document.getElementById("vocabChart"), {
+    type: "pie",
+    data: {
+      labels: ["新词", "待复习", "已掌握"],
+      datasets: [{
+        data: [countNew, countReview, countMastered],
+        backgroundColor: [
+          "rgba(255,99,132,0.6)",
+          "rgba(54,162,235,0.6)",
+          "rgba(75,192,192,0.6)"
+        ]
+      }]
+    },
+    options: { responsive: true }
+  });
+}
+
+
+// ---------------------------
+// 3）语法练习正确率（错题本）
+// ---------------------------
+function renderGrammarChart(grammar) {
+  const wrongs = grammar.wrongs ? grammar.wrongs.length : 0;
+  const correct = grammar.totalAttempt
+    ? grammar.totalAttempt - wrongs
+    : 0;
+
+  grammarChart = new Chart(document.getElementById("grammarChart"), {
+    type: "doughnut",
+    data: {
+      labels: ["正确题数", "错题数"],
+      datasets: [{
+        data: [correct, wrongs],
+        backgroundColor: [
+          "rgba(75,192,192,0.6)",
+          "rgba(255,99,132,0.6)"
+        ]
+      }]
+    },
+    options: { responsive: true }
+  });
+}
+
+
+// ---------------------------
+// 4）每日学习活动柱状图（stats）
+// ---------------------------
+function renderDailyChart(stats) {
+  const days = [];
+  const counts = [];
+
+  if (stats.days) {
+    for (const d of Object.keys(stats.days)) {
+      days.push(d);
+      counts.push(stats.days[d]);
+    }
+  }
+
+  dailyChart = new Chart(document.getElementById("dailyChart"), {
+    type: "bar",
+    data: {
+      labels: days,
+      datasets: [{
+        label: "每日任务完成数",
+        data: counts,
+        backgroundColor: "rgba(153,102,255,0.6)"
+      }]
+    },
+    options: { responsive: true }
+  });
+}
+
+</script>
+</body>
+</html>
